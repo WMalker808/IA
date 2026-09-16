@@ -176,7 +176,15 @@ def article(content_id):
         if row is None:
             abort(404)
         history = store.article_history(conn, content_id)
-    return render_template("article.html", article=row, history=history)
+    # The newest event decides the piece's current status; history is newest-first.
+    current = history[0] if history else None
+    return render_template(
+        "article.html",
+        article=row,
+        history=history,
+        current_action=current["action"] if current else None,
+        current_date=current["mark_date"] if current else None,
+    )
 
 
 # --- read API ---------------------------------------------------------------

@@ -187,10 +187,24 @@ def article_history(conn, content_id):
 
 
 def days_with_marks(conn, limit=14):
-    """Recent days that have any marking activity, newest first."""
+    """Recent days with activity, newest first, split by current state.
+
+    `marked`/`retracted` count the current state per article (the latest event
+    for each content_id on that day), so the numbers say what the day's calls
+    were — not how many times the copy changed.
+    """
     return conn.execute(
-        """SELECT mark_date, COUNT(DISTINCT content_id) AS touched
-           FROM mark_events GROUP BY mark_date ORDER BY mark_date DESC LIMIT ?""",
+        """
+        WITH latest AS (
+            SELECT content_id, mark_date, MAX(id) AS id
+            FROM mark_events GROUP BY content_id, mark_date
+        )
+        SELECT e.mark_date,
+               SUM(CASE WHEN e.action = 'mark' THEN 1 ELSE 0 END) AS marked,
+               SUM(CASE WHEN e.action = 'retract' THEN 1 ELSE 0 END) AS retracted
+        FROM mark_events e JOIN latest ON latest.id = e.id
+        GROUP BY e.mark_date ORDER BY e.mark_date DESC LIMIT ?
+        """,
         (limit,),
     ).fetchall()
 
