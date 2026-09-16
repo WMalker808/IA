@@ -151,7 +151,8 @@ h2 {
 
 form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 
-input[type="text"] {
+input[type="text"],
+input[type="search"] {
   font: inherit;
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--line);
@@ -159,6 +160,11 @@ input[type="text"] {
   background: var(--surface);
   min-width: 14rem;
   flex: 1 1 14rem;
+}
+
+input:disabled, button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 button {
@@ -195,6 +201,24 @@ button.quiet:hover { background: #f6eeed; border-color: var(--retract); }
 
 .hint {
   color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+}
+
+/* --- pull from CAPI ------------------------------------------------------- */
+
+form.capi-search { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0 0 0.5rem; }
+
+.capi-error {
+  color: var(--retract);
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+  border-left: 2px solid var(--retract);
+  padding-left: 0.75rem;
+}
+
+.capi-ok {
+  color: var(--signal);
   font-size: 0.875rem;
   margin: 0 0 0.75rem;
 }

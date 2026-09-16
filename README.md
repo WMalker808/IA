@@ -4,8 +4,9 @@ A prototype for marking articles as important on a given day, keeping the
 history, and staying out of the CMS.
 
 ```bash
-pip install flask
+pip install -r requirements.txt
 python seed.py     # builds importance.db, reads the real article from the uploaded Flexible payload
+export GUARDIAN_CAPI_KEY=your-key-here   # optional; enables the CAPI search box
 python app.py      # http://localhost:5000
 ```
 
@@ -73,6 +74,28 @@ POST /api/articles            feed the cache a Flexible document or CAPI respons
 `POST /api/articles` accepts either payload and detects which is which. Both
 resolve to the same `content_id`, since CAPI's `internalComposerCode` is the
 Flexible document id.
+
+## Pulling content from CAPI
+
+`ingest.py` has always been able to *parse* a CAPI response; `capi.py` is the
+half that *fetches* one. Set a key and a search box appears on each open day:
+
+```
+export GUARDIAN_CAPI_KEY=your-key-here      # or paste it into API_KEY in capi.py
+```
+
+Get a key at https://open-platform.theguardian.com/access/. Searching hits
+`GET https://content.guardianapis.com/search`, and each result is cached as a
+candidate article ready to mark — `POST /day/<date>/pull` with a `q` field does
+the same thing for scripts. Nothing is written back to the CMS; CAPI is only
+ever read.
+
+One caveat: the tool prefers CAPI's **internal** fields — `internalComposerCode`
+(the Flexible document id used as `content_id`), `internalPageCode` and
+`internalRevision`. Those are only returned to internal Guardian keys. With an
+open-platform key they are absent, so the ingest layer falls back to the public
+content id and `webTitle`, and the revision-drift warning stays quiet until a
+key carrying `internalRevision` is used.
 
 ## What a real version needs
 

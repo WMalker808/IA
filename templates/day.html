@@ -65,6 +65,16 @@
 {% endif %}
 
 {% if not is_past %}
+<h2>Pull from CAPI</h2>
+<p class="hint">Search the Guardian Content API for today's pieces and drop the results into the list below to mark.</p>
+{% if capi_error %}<p class="capi-error">{{ capi_error }}</p>{% endif %}
+{% if pulled is not none %}<p class="capi-ok">Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }} into the cache.</p>{% endif %}
+{% if not capi_ready %}<p class="hint">No CAPI key set yet — add one in <code>capi.py</code> or export <code>GUARDIAN_CAPI_KEY</code>, then search.</p>{% endif %}
+<form class="capi-search" method="post" action="{{ url_for('pull', day_str=day_str) }}">
+  <input type="search" name="q" value="{{ capi_query }}" placeholder="Search Guardian content, e.g. budget" {% if not capi_ready %}disabled{% endif %}>
+  <button type="submit" {% if not capi_ready %}disabled{% endif %}>Pull</button>
+</form>
+
 <h2>Mark an article</h2>
 <p class="hint">Marking records the article's current revision, so we can tell later if it changed after the call was made.</p>
 <div class="log">

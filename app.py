@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
+import capi
 import store
 from ingest import from_payload
 
@@ -85,7 +86,40 @@ def day(day_str):
         drift_threshold=DRIFT_THRESHOLD,
         cached=cached,
         db_path=store.DB_PATH,
+        capi_ready=capi.has_key(),
+        capi_query=request.args.get("q", ""),
+        capi_error=request.args.get("capi_error"),
+        pulled=request.args.get("pulled", type=int),
     )
+
+
+@app.route("/day/<day_str>/pull", methods=["POST"])
+def pull(day_str):
+    """Search the Guardian Content API and cache the results as candidates.
+
+    This is how today's real articles get in front of an editor. It only reads
+    from CAPI; the results become rows in the local `articles` cache, ready to
+    be marked. It never writes back to the CMS.
+    """
+    parse_day(day_str)
+    query = (request.form.get("q") or "").strip()
+    if not query:
+        return redirect(url_for("day", day_str=day_str))
+    try:
+        results = capi.search(query)
+    except capi.CapiError as exc:
+        return redirect(url_for("day", day_str=day_str, q=query, capi_error=str(exc)))
+
+    added = 0
+    with store.connect() as conn:
+        for item in results:
+            try:
+                article = from_payload(capi.as_payload(item))
+            except (ValueError, KeyError):
+                continue  # skip anything CAPI hands back that we can't read
+            store.upsert_article(conn, article)
+            added += 1
+    return redirect(url_for("day", day_str=day_str, q=query, pulled=added))
 
 
 @app.route("/day/<day_str>/mark", methods=["POST"])
