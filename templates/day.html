@@ -2,35 +2,51 @@
 {% block title %}{{ day|longdate }} — Day log{% endblock %}
 
 {% block content %}
-<h1 class="daydate">{{ day|longdate }}</h1>
-<p class="daysub">
-  {% if marked|length == 0 %}
-    Nothing marked yet{% if is_today %} today{% endif %}.
-  {% elif marked|length == 1 %}
-    One article marked{% if is_today %} so far today{% endif %}.
-  {% else %}
-    {{ marked|length }} articles marked{% if is_today %} so far today{% endif %}.
-  {% endif %}
-  {% if is_past %}This day is closed — you're looking at what was decided at the time.{% endif %}
-</p>
+<section class="hero">
+  <p class="eyebrow">{% if is_today %}Today{% elif is_past %}Closed day{% else %}Day log{% endif %}</p>
+  <h1 class="daydate">{{ day|longdate }}</h1>
+  <p class="daysub">
+    {% if marked|length == 0 %}
+      Nothing marked yet{% if is_today %} today{% endif %}.
+    {% elif marked|length == 1 %}
+      One article marked{% if is_today %} so far today{% endif %}.
+    {% else %}
+      {{ marked|length }} articles marked{% if is_today %} so far today{% endif %}.
+    {% endif %}
+  </p>
+  {% if is_past %}<span class="closed-flag">This day is closed — you're looking at what was decided at the time.</span>{% endif %}
+
+  <div class="stats">
+    <div class="stat"><div class="n">{{ marked|length }}</div><div class="l">marked</div></div>
+    <div class="stat"><div class="n">{{ retracted|length }}</div><div class="l">retracted</div></div>
+    <div class="stat"><div class="n">{{ cached }}</div><div class="l">in the cache</div></div>
+  </div>
+</section>
 
 <nav class="daynav">
-  <a href="{{ url_for('day', day_str=prev_day) }}">← {{ prev_day|shortdate }}</a>
-  {% if next_day %}<a href="{{ url_for('day', day_str=next_day) }}">{{ next_day|shortdate }} →</a>{% endif %}
-  {% if not is_today %}<a href="{{ url_for('home') }}">Back to today</a>{% endif %}
+  <a class="pill" href="{{ url_for('day', day_str=prev_day) }}">← {{ prev_day|shortdate }}</a>
+  {% if next_day %}<a class="pill" href="{{ url_for('day', day_str=next_day) }}">{{ next_day|shortdate }} →</a>{% endif %}
+  {% if not is_today %}<a class="pill ghost" href="{{ url_for('home') }}">Back to today</a>{% endif %}
 </nav>
 
-<h2>Marked</h2>
-<ul class="log">
+<div class="section-head"><h2>Marked</h2><span class="rule"></span></div>
+<ul class="timeline">
   {% for m in marked %}
-  <li class="entry">
-    <span class="time">{{ m.occurred_at|clock }}</span>
-    <div>
+  <li class="tl-item">
+    <span class="tl-time">{{ m.occurred_at|clock }}</span>
+    <div class="card flagged">
       <p class="headline"><a href="{{ url_for('article', content_id=m.content_id) }}">{{ m.headline }}</a></p>
-      <p class="meta">{{ m.actor|person }} · {{ m.section }} · revision {{ m.revision }}</p>
+      <p class="meta">
+        <span class="byline">{{ m.actor|person }}</span>
+        <span class="sep">·</span> {{ m.section }}
+        <span class="sep">·</span> revision {{ m.revision }}
+      </p>
       {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
       {% if m.revision_drift > drift_threshold %}
-        <span class="drift">Rewritten since marking — {{ m.revision_drift }} revisions on. Worth a second look.</span>
+        <p class="drift">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          Rewritten since marking — {{ m.revision_drift }} revisions on. Worth a second look.
+        </p>
       {% endif %}
       {% if not is_past %}
       <div class="actions">
@@ -49,15 +65,14 @@
 </ul>
 
 {% if retracted %}
-<h2>Retracted</h2>
-<ul class="log">
+<div class="section-head"><h2>Retracted</h2><span class="rule"></span></div>
+<ul class="retracted">
   {% for r in retracted %}
-  <li class="entry is-retracted">
-    <span class="time">{{ r.occurred_at|clock }}</span>
+  <li>
+    <span class="t">{{ r.occurred_at|clock }}</span>
     <div>
-      <p class="headline">{{ r.headline }}</p>
-      <p class="meta">Taken off by {{ r.actor|person }}</p>
-      {% if r.note %}<p class="note">{{ r.note }}</p>{% endif %}
+      <p class="h">{{ r.headline }}</p>
+      <p class="m">Taken off by {{ r.actor|person }}{% if r.note %} — {{ r.note }}{% endif %}</p>
     </div>
   </li>
   {% endfor %}
@@ -65,48 +80,63 @@
 {% endif %}
 
 {% if not is_past %}
-<h2>Pull from CAPI</h2>
-<p class="hint">Search the Guardian Content API for today's pieces and drop the results into the list below to mark.</p>
-{% if capi_error %}<p class="capi-error">{{ capi_error }}</p>{% endif %}
-{% if pulled is not none %}<p class="capi-ok">Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }} into the cache.</p>{% endif %}
-{% if not capi_ready %}<p class="hint">No CAPI key set yet — add one in <code>capi.py</code> or export <code>GUARDIAN_CAPI_KEY</code>, then search.</p>{% endif %}
-<form class="capi-search" method="post" action="{{ url_for('pull', day_str=day_str) }}">
-  <input type="search" name="q" value="{{ capi_query }}" placeholder="Search Guardian content, e.g. budget" {% if not capi_ready %}disabled{% endif %}>
-  <button type="submit" {% if not capi_ready %}disabled{% endif %}>Pull</button>
-</form>
+<div class="section-head"><h2>Pull from CAPI</h2><span class="rule"></span></div>
+{% if capi_error %}<p class="banner err">{{ capi_error }}</p>{% endif %}
+{% if pulled is not none %}<p class="banner ok">Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }} into the cache.</p>{% endif %}
+<div class="pull-card">
+  <h3>Search the Guardian Content API</h3>
+  <p class="hint">
+    {% if capi_ready %}
+      Find today's pieces and drop the results into the list below to mark.
+    {% else %}
+      No key set yet — paste one into <code>MY_CAPI_KEY</code> in <code>capi.py</code>, or export <code>GUARDIAN_CAPI_KEY</code>, then search.
+    {% endif %}
+  </p>
+  <form class="capi-search" method="post" action="{{ url_for('pull', day_str=day_str) }}">
+    <span class="field">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" name="q" value="{{ capi_query }}" placeholder="e.g. autumn budget" {% if not capi_ready %}disabled{% endif %}>
+    </span>
+    <button type="submit" {% if not capi_ready %}disabled{% endif %}>Pull</button>
+  </form>
+</div>
 
-<h2>Mark an article</h2>
+<div class="section-head"><h2>Mark an article</h2><span class="rule"></span></div>
 <p class="hint">Marking records the article's current revision, so we can tell later if it changed after the call was made.</p>
-<div class="log">
+{% if candidates %}
+<div class="grid">
   {% for c in candidates %}
   <div class="candidate">
-    <div>
+    <div class="grow">
       <p class="headline">{{ c.headline }}</p>
-      <p class="meta">{{ c.section }} · revision {{ c.revision }}</p>
+      <p class="meta">{{ c.section }} <span class="sep">·</span> revision {{ c.revision }}</p>
     </div>
     <form class="inline" method="post" action="{{ url_for('mark', day_str=day_str) }}">
-      <input type="hidden" name="content_id" value="{{ c.content_id }}">
       <input type="text" name="note" placeholder="Note (optional)">
+      <input type="hidden" name="content_id" value="{{ c.content_id }}">
       <button type="submit">Mark</button>
     </form>
   </div>
-  {% else %}
+  {% endfor %}
+</div>
+{% else %}
   {% if cached == 0 %}
-  <p class="empty">No articles loaded yet. Run <code>python seed.py</code>, or POST a Flexible or CAPI payload to <code>/api/articles</code>. Reading from <code>{{ db_path }}</code>.</p>
+  <p class="empty">No articles loaded yet. Run <code>python seed.py</code>, pull from CAPI above, or POST a payload to <code>/api/articles</code>. Reading from <code>{{ db_path }}</code>.</p>
   {% else %}
   <p class="empty">All {{ cached }} cached articles are already marked for this day.</p>
   {% endif %}
-  {% endfor %}
-</div>
+{% endif %}
 {% endif %}
 
 {% if recent %}
-<h2>Earlier days</h2>
+<div class="section-head"><h2>Earlier days</h2><span class="rule"></span></div>
 <ul class="earlier">
   {% for d in recent %}
   <li>
-    <a href="{{ url_for('day', day_str=d.mark_date) }}">{{ d.mark_date|shortdate }}</a>
-    <span class="count">— {{ d.touched }} article{{ '' if d.touched == 1 else 's' }} touched</span>
+    <a href="{{ url_for('day', day_str=d.mark_date) }}">
+      <span class="d">{{ d.mark_date|shortdate }}</span>
+      <span class="count">{{ d.touched }} article{{ '' if d.touched == 1 else 's' }} touched</span>
+    </a>
   </li>
   {% endfor %}
 </ul>

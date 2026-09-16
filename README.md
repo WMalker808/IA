@@ -81,7 +81,7 @@ Flexible document id.
 half that *fetches* one. Set a key and a search box appears on each open day:
 
 ```
-export GUARDIAN_CAPI_KEY=your-key-here      # or paste it into API_KEY in capi.py
+export GUARDIAN_CAPI_KEY=your-key-here      # or paste it into MY_CAPI_KEY in capi.py
 ```
 
 Get a key at https://open-platform.theguardian.com/access/. Searching hits

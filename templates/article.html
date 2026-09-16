@@ -2,19 +2,26 @@
 {% block title %}{{ article.headline }} — Day log{% endblock %}
 
 {% block content %}
-<h1 class="daydate">{{ article.headline }}</h1>
-<p class="daysub">
-  {{ article.section }} · now at revision {{ article.revision }}
-  {% if article.web_url %}· <a href="{{ article.web_url }}">Read on the site</a>{% endif %}
-</p>
+<section class="hero">
+  <p class="eyebrow">Article history</p>
+  <h1 class="daydate">{{ article.headline }}</h1>
+  <p class="daysub">
+    {{ article.section }} <span class="sep">·</span> now at revision {{ article.revision }}
+    {% if article.web_url %}<span class="sep">·</span> <a href="{{ article.web_url }}">Read on the site ↗</a>{% endif %}
+  </p>
+</section>
 
-<h2>Every time this piece was marked or taken off</h2>
+<nav class="daynav">
+  <a class="pill ghost" href="{{ url_for('home') }}">← Back to today</a>
+</nav>
+
+<div class="section-head"><h2>Every time this piece was marked or taken off</h2><span class="rule"></span></div>
 <ul class="history">
   {% for e in history %}
   <li class="{{ 'mark-row' if e.action == 'mark' else 'retract-row' }}">
     <span class="when">{{ e.mark_date|shortdate }}</span>
-    <div>
-      <p>{{ 'Marked' if e.action == 'mark' else 'Retracted' }} by {{ e.actor|person }} at {{ e.occurred_at|clock }}</p>
+    <div class="card">
+      <p><span class="verb">{{ 'Marked' if e.action == 'mark' else 'Retracted' }}</span> by {{ e.actor|person }} at {{ e.occurred_at|clock }}</p>
       <p class="meta">Article was at revision {{ e.revision }}</p>
       {% if e.note %}<p class="note">{{ e.note }}</p>{% endif %}
     </div>

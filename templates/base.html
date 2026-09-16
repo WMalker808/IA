@@ -3,13 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14110d" media="(prefers-color-scheme: dark)">
 <title>{% block title %}Day log{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
-<div class="wrap">
-  <p class="tool"><a href="{{ url_for('home') }}">Day log</a> — what mattered, and when we said so</p>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('home') }}">
+    <span class="dot" aria-hidden="true"></span>
+    Day log
+    <small>what mattered, and when we said so</small>
+  </a>
+  <span class="spacer"></span>
+</header>
+<main class="wrap">
   {% block content %}{% endblock %}
-</div>
+</main>
 </body>
 </html>

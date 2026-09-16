@@ -28,12 +28,19 @@ import os
 
 import requests
 
-# --- your key goes here -----------------------------------------------------
-# Prefer the environment variable; the empty-string fallback is the "space"
-# left for you to paste a key into for a quick local run. Leave it empty and
-# the app will tell you the key is missing rather than failing obscurely.
-API_KEY = os.environ.get("GUARDIAN_CAPI_KEY", "")
-# ----------------------------------------------------------------------------
+# ============================================================================
+#  YOUR GUARDIAN CAPI KEY GOES HERE
+#  Paste it between the quotes on the line below, e.g.
+#      MY_CAPI_KEY = "test-a1b2c3d4-...."
+#  or leave it blank and set GUARDIAN_CAPI_KEY in the environment instead.
+#  Get a key at https://open-platform.theguardian.com/access/ — don't commit
+#  a real key to a shared repo.
+# ============================================================================
+MY_CAPI_KEY = ""
+
+# Environment variable wins if set; otherwise the pasted key above is used.
+API_KEY = os.environ.get("GUARDIAN_CAPI_KEY", "") or MY_CAPI_KEY
+# ============================================================================
 
 CAPI_BASE = os.environ.get("GUARDIAN_CAPI_BASE", "https://content.guardianapis.com")
 
