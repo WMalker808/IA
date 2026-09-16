@@ -128,9 +128,11 @@ def pull(day_str):
     section = request.form.get("section") or ""
     if section not in PILLAR_VALUES:  # ignore anything not from our own dropdown
         section = ""
-    if not query:
-        return redirect(url_for("day", day_str=day_str, section=section or None))
+    if not query and not section:
+        # Need at least a search term or a section to pull anything.
+        return redirect(url_for("day", day_str=day_str))
     try:
+        # With a section and no query, CAPI returns that section's latest.
         results = capi.search(query, section=section or None)
     except capi.CapiError as exc:
         return redirect(url_for("day", day_str=day_str, q=query, section=section or None, capi_error=str(exc)))

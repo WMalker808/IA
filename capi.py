@@ -91,19 +91,21 @@ def _get(path, params):
         raise CapiError("CAPI returned something that wasn't JSON.") from exc
 
 
-def search(query, page_size=20, section=None, order_by="newest"):
+def search(query="", page_size=20, section=None, order_by="newest"):
     """Search CAPI and return the raw content items (response.results).
 
-    Each item is shaped like CAPI's `content` object, so wrap it as
-    {"response": {"content": item}} before handing it to ingest.from_payload
-    (see `as_payload` below).
+    `query` is optional: with just a `section` and no query, CAPI returns the
+    most recent items in that section (order-by newest). Each item is shaped
+    like CAPI's `content` object, so wrap it as {"response": {"content": item}}
+    before handing it to ingest.from_payload (see `as_payload` below).
     """
     params = {
-        "q": query,
         "page-size": page_size,
         "show-fields": SHOW_FIELDS,
         "order-by": order_by,
     }
+    if query:
+        params["q"] = query
     if section:
         params["section"] = section
     payload = _get("search", params)

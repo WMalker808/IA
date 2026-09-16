@@ -4,7 +4,7 @@
 {% block content %}
 <section class="hero">
   <p class="eyebrow">{% if is_today %}Today{% elif is_past %}Closed day{% else %}Day log{% endif %}</p>
-  <h1 class="daydate">{{ day|longdate }}</h1>
+  <h1 class="daydate compact">{{ day|longdate }}</h1>
   <p class="daysub">
     {% if marked|length == 0 %}
       Nothing marked yet{% if is_today %} today{% endif %}.
@@ -87,7 +87,7 @@
   <h3>Search the Guardian Content API</h3>
   <p class="hint">
     {% if capi_ready %}
-      Find today's pieces and drop the results into the list below to mark.
+      Pick a section and hit Pull for its latest, or add a search term to narrow it.
     {% else %}
       No key set yet — paste one into <code>MY_CAPI_KEY</code> in <code>capi.py</code>, or export <code>GUARDIAN_CAPI_KEY</code>, then search.
     {% endif %}
@@ -103,7 +103,7 @@
     </span>
     <span class="field">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="search" name="q" value="{{ capi_query }}" placeholder="e.g. autumn budget" {% if not capi_ready %}disabled{% endif %}>
+      <input type="search" name="q" value="{{ capi_query }}" placeholder="Search, or leave blank for the latest" {% if not capi_ready %}disabled{% endif %}>
     </span>
     <button type="submit" {% if not capi_ready %}disabled{% endif %}>Pull</button>
   </form>

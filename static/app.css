@@ -154,6 +154,10 @@ a { color: inherit; }
   margin: 0;
   color: var(--ink);
 }
+.daydate.compact {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  letter-spacing: -.01em;
+}
 .daysub { color: var(--muted); margin: .6rem 0 0; max-width: 40rem; }
 .closed-flag {
   display: inline-block;
