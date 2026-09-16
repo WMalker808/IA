@@ -25,6 +25,26 @@ CURRENT_USER = "hollie.richardson@guardian.co.uk"
 # A piece rewritten by this many revisions since marking gets flagged for review.
 DRIFT_THRESHOLD = 25
 
+# Guardian pillars / sections offered in the CAPI search dropdown. The value is
+# the CAPI section id passed as ?section=…; the empty value searches everything.
+PILLARS = [
+    ("", "All sections"),
+    ("news", "News"),
+    ("politics", "Politics"),
+    ("world", "World"),
+    ("environment", "Environment"),
+    ("business", "Business"),
+    ("technology", "Technology"),
+    ("science", "Science"),
+    ("society", "Society"),
+    ("sport", "Sport"),
+    ("football", "Football"),
+    ("culture", "Culture"),
+    ("lifestyle", "Lifestyle"),
+    ("commentisfree", "Opinion"),
+]
+PILLAR_VALUES = {value for value, _ in PILLARS}
+
 
 def parse_day(value):
     try:
@@ -90,6 +110,8 @@ def day(day_str):
         capi_query=request.args.get("q", ""),
         capi_error=request.args.get("capi_error"),
         pulled=request.args.get("pulled", type=int),
+        pillars=PILLARS,
+        capi_section=request.args.get("section", ""),
     )
 
 
@@ -103,12 +125,15 @@ def pull(day_str):
     """
     parse_day(day_str)
     query = (request.form.get("q") or "").strip()
+    section = request.form.get("section") or ""
+    if section not in PILLAR_VALUES:  # ignore anything not from our own dropdown
+        section = ""
     if not query:
-        return redirect(url_for("day", day_str=day_str))
+        return redirect(url_for("day", day_str=day_str, section=section or None))
     try:
-        results = capi.search(query)
+        results = capi.search(query, section=section or None)
     except capi.CapiError as exc:
-        return redirect(url_for("day", day_str=day_str, q=query, capi_error=str(exc)))
+        return redirect(url_for("day", day_str=day_str, q=query, section=section or None, capi_error=str(exc)))
 
     added = 0
     with store.connect() as conn:
@@ -119,7 +144,7 @@ def pull(day_str):
                 continue  # skip anything CAPI hands back that we can't read
             store.upsert_article(conn, article)
             added += 1
-    return redirect(url_for("day", day_str=day_str, q=query, pulled=added))
+    return redirect(url_for("day", day_str=day_str, q=query, section=section or None, pulled=added))
 
 
 @app.route("/day/<day_str>/mark", methods=["POST"])

@@ -93,6 +93,14 @@
     {% endif %}
   </p>
   <form class="capi-search" method="post" action="{{ url_for('pull', day_str=day_str) }}">
+    <span class="select">
+      <select name="section" aria-label="Pillar or section" {% if not capi_ready %}disabled{% endif %}>
+        {% for value, label in pillars %}
+        <option value="{{ value }}" {% if value == capi_section %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </span>
     <span class="field">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="search" name="q" value="{{ capi_query }}" placeholder="e.g. autumn budget" {% if not capi_ready %}disabled{% endif %}>
