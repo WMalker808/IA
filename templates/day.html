@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ day|longdate }} — Day log{% endblock %}
+
+{% block content %}
+<h1 class="daydate">{{ day|longdate }}</h1>
+<p class="daysub">
+  {% if marked|length == 0 %}
+    Nothing marked yet{% if is_today %} today{% endif %}.
+  {% elif marked|length == 1 %}
+    One article marked{% if is_today %} so far today{% endif %}.
+  {% else %}
+    {{ marked|length }} articles marked{% if is_today %} so far today{% endif %}.
+  {% endif %}
+  {% if is_past %}This day is closed — you're looking at what was decided at the time.{% endif %}
+</p>
+
+<nav class="daynav">
+  <a href="{{ url_for('day', day_str=prev_day) }}">← {{ prev_day|shortdate }}</a>
+  {% if next_day %}<a href="{{ url_for('day', day_str=next_day) }}">{{ next_day|shortdate }} →</a>{% endif %}
+  {% if not is_today %}<a href="{{ url_for('home') }}">Back to today</a>{% endif %}
+</nav>
+
+<h2>Marked</h2>
+<ul class="log">
+  {% for m in marked %}
+  <li class="entry">
+    <span class="time">{{ m.occurred_at|clock }}</span>
+    <div>
+      <p class="headline"><a href="{{ url_for('article', content_id=m.content_id) }}">{{ m.headline }}</a></p>
+      <p class="meta">{{ m.actor|person }} · {{ m.section }} · revision {{ m.revision }}</p>
+      {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
+      {% if m.revision_drift > drift_threshold %}
+        <span class="drift">Rewritten since marking — {{ m.revision_drift }} revisions on. Worth a second look.</span>
+      {% endif %}
+      {% if not is_past %}
+      <div class="actions">
+        <form class="inline" method="post" action="{{ url_for('retract', day_str=day_str) }}">
+          <input type="hidden" name="content_id" value="{{ m.content_id }}">
+          <input type="text" name="note" placeholder="Why it's coming off (optional)">
+          <button class="quiet" type="submit">Retract</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </li>
+  {% else %}
+  <li class="empty">Mark an article below and it appears here, stamped with the time and your name.</li>
+  {% endfor %}
+</ul>
+
+{% if retracted %}
+<h2>Retracted</h2>
+<ul class="log">
+  {% for r in retracted %}
+  <li class="entry is-retracted">
+    <span class="time">{{ r.occurred_at|clock }}</span>
+    <div>
+      <p class="headline">{{ r.headline }}</p>
+      <p class="meta">Taken off by {{ r.actor|person }}</p>
+      {% if r.note %}<p class="note">{{ r.note }}</p>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if not is_past %}
+<h2>Mark an article</h2>
+<p class="hint">Marking records the article's current revision, so we can tell later if it changed after the call was made.</p>
+<div class="log">
+  {% for c in candidates %}
+  <div class="candidate">
+    <div>
+      <p class="headline">{{ c.headline }}</p>
+      <p class="meta">{{ c.section }} · revision {{ c.revision }}</p>
+    </div>
+    <form class="inline" method="post" action="{{ url_for('mark', day_str=day_str) }}">
+      <input type="hidden" name="content_id" value="{{ c.content_id }}">
+      <input type="text" name="note" placeholder="Note (optional)">
+      <button type="submit">Mark</button>
+    </form>
+  </div>
+  {% else %}
+  {% if cached == 0 %}
+  <p class="empty">No articles loaded yet. Run <code>python seed.py</code>, or POST a Flexible or CAPI payload to <code>/api/articles</code>. Reading from <code>{{ db_path }}</code>.</p>
+  {% else %}
+  <p class="empty">All {{ cached }} cached articles are already marked for this day.</p>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if recent %}
+<h2>Earlier days</h2>
+<ul class="earlier">
+  {% for d in recent %}
+  <li>
+    <a href="{{ url_for('day', day_str=d.mark_date) }}">{{ d.mark_date|shortdate }}</a>
+    <span class="count">— {{ d.touched }} article{{ '' if d.touched == 1 else 's' }} touched</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
