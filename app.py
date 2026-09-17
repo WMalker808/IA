@@ -8,6 +8,7 @@ revision number we rely on to spot rewrites.
 Run:  python app.py       (seed first with:  python seed.py)
 """
 
+from collections import Counter
 from datetime import date, datetime, timedelta
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
@@ -44,6 +45,48 @@ PILLARS = [
     ("commentisfree", "Opinion"),
 ]
 PILLAR_VALUES = {value for value, _ in PILLARS}
+
+# The Guardian's five pillars, used to colour-code section chips. Only the
+# section *name* is stored, so the pillar is derived from it here; anything
+# unrecognised is treated as News, which is where most sections live.
+PILLAR_OF_SECTION = {
+    "opinion": "opinion", "comment is free": "opinion",
+    "sport": "sport", "football": "sport", "cricket": "sport", "rugby": "sport",
+    "culture": "culture", "film": "culture", "music": "culture", "books": "culture",
+    "television & radio": "culture", "art and design": "culture", "stage": "culture",
+    "games": "culture",
+    "lifestyle": "lifestyle", "food": "lifestyle", "fashion": "lifestyle",
+    "travel": "lifestyle", "life and style": "lifestyle", "health & wellbeing": "lifestyle",
+}
+PILLAR_LABEL = {"news": "News", "opinion": "Opinion", "sport": "Sport",
+                "culture": "Culture", "lifestyle": "Lifestyle"}
+
+# Past this many marks the day view switches to compact rows by default.
+COMPACT_ABOVE = 8
+
+
+def pillar_of(section):
+    pid = PILLAR_OF_SECTION.get((section or "").strip().lower(), "news")
+    return {"id": pid, "label": PILLAR_LABEL[pid]}
+
+
+app.jinja_env.globals["pillar_of"] = pillar_of
+
+
+@app.template_global()
+def daylink(day_str, **overrides):
+    """A link to the day page that keeps the current filters unless overridden.
+
+    Pass a value of None/"" to drop a parameter. Transient banner args (q,
+    pulled, capi_section, capi_error) are deliberately not carried over.
+    """
+    args = {k: v for k, v in request.args.items() if k in ("section", "attention", "view")}
+    for k, v in overrides.items():
+        if v in (None, "", False):
+            args.pop(k, None)
+        else:
+            args[k] = v
+    return url_for("day", day_str=day_str, **args)
 
 
 def parse_day(value):
@@ -86,11 +129,47 @@ def day(day_str):
     day_obj = parse_day(day_str)
     today = date.today()
     with store.connect() as conn:
-        marked = store.marked_on(conn, day_str)
+        marked_all = store.marked_on(conn, day_str)
         retracted = store.retracted_on(conn, day_str)
-        candidates = store.unmarked_candidates(conn, day_str)
+        candidates_all = [dict(c) for c in store.unmarked_candidates(conn, day_str)]
         recent = store.days_with_marks(conn)
         cached = store.article_count(conn)
+
+    for m in marked_all:
+        m["drifted"] = m["revision_drift"] > DRIFT_THRESHOLD
+    drift_count = sum(1 for m in marked_all if m["drifted"])
+
+    # The shape of the day: sections with marks, heaviest first.
+    counts = Counter(m["section"] or "Uncategorised" for m in marked_all)
+    section_counts = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+    # Filters live in the URL so they survive a reload and can be shared.
+    section_filter = request.args.get("section", "")
+    attention = request.args.get("attention") == "1"
+    view = request.args.get("view", "")
+
+    marked = [
+        m for m in marked_all
+        if (not section_filter or (m["section"] or "Uncategorised") == section_filter)
+        and (not attention or m["drifted"])
+    ]
+    candidates = [
+        c for c in candidates_all
+        if not section_filter or (c["section"] or "Uncategorised") == section_filter
+    ]
+
+    # Compact rows once the day is heavy, unless the editor asked otherwise.
+    if view == "cards":
+        compact = False
+    elif view == "compact":
+        compact = True
+    else:
+        compact = len(marked_all) > COMPACT_ABOVE
+    candidates_compact = compact or len(candidates_all) > COMPACT_ABOVE
+
+    capi_section = request.args.get("capi_section", "")
+    pulled_section = dict(PILLARS).get(capi_section) if capi_section else None
+
     return render_template(
         "day.html",
         day=day_obj,
@@ -98,8 +177,19 @@ def day(day_str):
         is_today=day_obj == today,
         is_past=day_obj < today,
         marked=marked,
+        marked_total=len(marked_all),
         retracted=retracted,
         candidates=candidates,
+        to_mark=len(candidates_all),
+        drift_count=drift_count,
+        section_counts=section_counts,
+        section_filter=section_filter,
+        attention=attention,
+        view=view,
+        compact=compact,
+        compact_above=COMPACT_ABOVE,
+        candidates_compact=candidates_compact,
+        filtered=bool(section_filter or attention),
         recent=[r for r in recent if r["mark_date"] != day_str],
         prev_day=(day_obj - timedelta(days=1)).isoformat(),
         next_day=(day_obj + timedelta(days=1)).isoformat() if day_obj < today else None,
@@ -110,8 +200,9 @@ def day(day_str):
         capi_query=request.args.get("q", ""),
         capi_error=request.args.get("capi_error"),
         pulled=request.args.get("pulled", type=int),
+        pulled_section=pulled_section,
         pillars=PILLARS,
-        capi_section=request.args.get("section", ""),
+        capi_section=capi_section,
     )
 
 
@@ -135,7 +226,8 @@ def pull(day_str):
         # With a section and no query, CAPI returns that section's latest.
         results = capi.search(query, section=section or None)
     except capi.CapiError as exc:
-        return redirect(url_for("day", day_str=day_str, q=query, section=section or None, capi_error=str(exc)))
+        return redirect(url_for("day", day_str=day_str, q=query, capi_section=section or None,
+                                capi_error=str(exc), _anchor="pull"))
 
     added = 0
     with store.connect() as conn:
@@ -146,7 +238,8 @@ def pull(day_str):
                 continue  # skip anything CAPI hands back that we can't read
             store.upsert_article(conn, article)
             added += 1
-    return redirect(url_for("day", day_str=day_str, q=query, section=section or None, pulled=added))
+    return redirect(url_for("day", day_str=day_str, q=query, capi_section=section or None,
+                            pulled=added, _anchor="pull"))
 
 
 @app.route("/day/<day_str>/mark", methods=["POST"])

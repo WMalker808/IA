@@ -1,50 +1,186 @@
 {% extends "base.html" %}
 {% block title %}{{ day|longdate }} — Day log{% endblock %}
 
+{% macro section_chip(section) -%}
+  {%- set p = pillar_of(section) -%}
+  <span class="chip pillar-{{ p.id }}"><span class="dot" aria-hidden="true"></span>{{ section or 'Uncategorised' }}<span class="sr-only"> ({{ p.label }})</span></span>
+{%- endmacro %}
+
+{% macro retract_form(m) -%}
+  <details class="retract">
+    <summary>Retract…</summary>
+    <form class="inline retract-form" method="post" action="{{ url_for('retract', day_str=day_str) }}">
+      <input type="hidden" name="content_id" value="{{ m.content_id }}">
+      <input type="text" name="note" aria-label="Reason for retracting ‘{{ m.headline }}’" placeholder="Reason (recommended)">
+      <button class="quiet" type="submit" data-busy="Retracting…" aria-label="Confirm retract of ‘{{ m.headline }}’">Confirm retract</button>
+    </form>
+  </details>
+{%- endmacro %}
+
 {% block content %}
 <section class="hero">
   <p class="eyebrow">{% if is_today %}Today{% elif is_past %}Closed day{% else %}Day log{% endif %}</p>
   <h1 class="daydate compact">{{ day|longdate }}</h1>
   <p class="daysub">
-    {% if marked|length == 0 %}
+    {% if marked_total == 0 %}
       Nothing marked yet{% if is_today %} today{% endif %}.
-    {% elif marked|length == 1 %}
+    {% elif marked_total == 1 %}
       One article marked{% if is_today %} so far today{% endif %}.
     {% else %}
-      {{ marked|length }} articles marked{% if is_today %} so far today{% endif %}.
+      {{ marked_total }} articles marked{% if is_today %} so far today{% endif %} across {{ section_counts|length }} section{{ '' if section_counts|length == 1 else 's' }}.
     {% endif %}
   </p>
   {% if is_past %}<span class="closed-flag">This day is closed — you're looking at what was decided at the time.</span>{% endif %}
 
   <div class="stats">
-    <div class="stat"><div class="n">{{ marked|length }}</div><div class="l">marked</div></div>
-    <div class="stat"><div class="n">{{ retracted|length }}</div><div class="l">retracted</div></div>
-    <div class="stat"><div class="n">{{ cached }}</div><div class="l">to mark</div></div>
+    <a class="stat {% if not filtered %}is-on{% endif %}" href="{{ daylink(day_str, section=None, attention=None) }}#marked"><div class="n">{{ marked_total }}</div><div class="l">marked</div></a>
+    <a class="stat warn {% if attention %}is-on{% endif %}" href="{{ daylink(day_str, attention=(None if attention else '1')) }}#marked" {% if attention %}aria-current="true"{% endif %}>
+      <div class="n">{{ drift_count }}</div>
+      <div class="l">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        need{{ 's' if drift_count == 1 else '' }} a second look
+      </div>
+    </a>
+    <a class="stat" href="#retracted"><div class="n">{{ retracted|length }}</div><div class="l">retracted</div></a>
+    <a class="stat" href="#candidates"><div class="n">{{ to_mark }}</div><div class="l">to mark</div></a>
   </div>
+
+  {% if section_counts %}
+  <nav class="sections" id="sections-strip" aria-label="Sections marked today">
+    <a class="chip filter {% if not section_filter %}is-on{% endif %}" {% if not section_filter %}aria-current="true"{% endif %} href="{{ daylink(day_str, section=None) }}#marked">All <b>{{ marked_total }}</b></a>
+    {% for name, count in section_counts %}
+      {% set p = pillar_of(name) %}
+      <a class="chip filter sec pillar-{{ p.id }} {% if section_filter == name %}is-on{% endif %}"
+         {% if section_filter == name %}aria-current="true"{% endif %}
+         href="{{ daylink(day_str, section=(None if section_filter == name else name)) }}#marked">
+        <span class="dot" aria-hidden="true"></span>{{ name }} <b>{{ count }}</b><span class="sr-only"> ({{ p.label }})</span>
+      </a>
+    {% endfor %}
+    {% if section_counts|length > 10 %}
+      <button type="button" class="chip more" id="more-sections" data-cap="10" aria-expanded="false" aria-controls="sections-strip" hidden>+{{ section_counts|length - 10 }} more</button>
+    {% endif %}
+  </nav>
+  {% endif %}
+  <nav class="daynav mobile-only" aria-label="Change day">
+    <a class="pill sm" href="{{ url_for('day', day_str=prev_day) }}">← {{ prev_day|shortdate }}</a>
+    {% if next_day %}<a class="pill sm" href="{{ url_for('day', day_str=next_day) }}">{{ next_day|shortdate }} →</a>{% endif %}
+    {% if not is_today %}<a class="pill sm ghost" href="{{ url_for('home') }}">Today</a>{% endif %}
+  </nav>
 </section>
 
-<nav class="daynav">
-  <a class="pill" href="{{ url_for('day', day_str=prev_day) }}">← {{ prev_day|shortdate }}</a>
-  {% if next_day %}<a class="pill" href="{{ url_for('day', day_str=next_day) }}">{{ next_day|shortdate }} →</a>{% endif %}
-  {% if not is_today %}<a class="pill ghost" href="{{ url_for('home') }}">Back to today</a>{% endif %}
+<nav class="subnav" aria-label="Jump to">
+  <a href="#marked">Marked <b>{{ marked_total }}</b></a>
+  {% if drift_count %}<a class="warn" href="{{ daylink(day_str, attention='1') }}#marked">Needs a look <b>{{ drift_count }}</b></a>{% endif %}
+  {% if retracted %}<a href="#retracted">Retracted <b>{{ retracted|length }}</b></a>{% endif %}
+  {% if not is_past %}
+    <a href="#pull">Pull</a>
+    <a href="#candidates">Candidates <b>{{ to_mark }}</b></a>
+  {% endif %}
+  <span class="spacer"></span>
+  <a class="pill sm" href="{{ url_for('day', day_str=prev_day) }}">← {{ prev_day|shortdate }}</a>
+  {% if next_day %}<a class="pill sm" href="{{ url_for('day', day_str=next_day) }}">{{ next_day|shortdate }} →</a>{% endif %}
+  {% if not is_today %}<a class="pill sm ghost" href="{{ url_for('home') }}">Today</a>{% endif %}
 </nav>
 
-<div class="section-head"><h2>Marked</h2><span class="rule"></span></div>
-{% if marked %}<p class="hint order-note">In the order they were marked through the day — earliest first.</p>{% endif %}
-<ul class="timeline">
+<div class="section-head" id="marked">
+  <h2>Marked</h2>
+  <span class="rule"></span>
+  {% if marked_total > 0 %}
+  <span class="view-toggle" role="group" aria-label="View">
+    <a class="{% if compact %}is-on{% endif %}" {% if compact %}aria-current="true"{% endif %} href="{{ daylink(day_str, view='compact') }}#marked">Compact</a>
+    <a class="{% if not compact %}is-on{% endif %}" {% if not compact %}aria-current="true"{% endif %} href="{{ daylink(day_str, view='cards') }}#marked">Cards</a>
+  </span>
+  {% endif %}
+</div>
+
+{% if filtered %}
+<p class="banner info filter-banner" role="status">
+  Showing {{ marked|length }} of {{ marked_total }}
+  {%- if attention %} that need a second look{% endif %}
+  {%- if section_filter %} in <strong>{{ section_filter }}</strong>{% endif %}.
+  <a class="textlink" href="{{ daylink(day_str, section=None, attention=None) }}#marked">Show all</a>
+</p>
+{% elif marked_total > 0 %}
+<p class="hint order-note">In the order they were marked through the day — earliest first.</p>
+{% endif %}
+
+{% if marked_total > compact_above %}
+<div class="filterbar">
+  <label class="filter-label" for="marked-filter">Find</label>
+  <span class="field">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="search" id="marked-filter" aria-label="Find a marked article by headline or section" placeholder="Headline or section…" data-filter-target="#marked-list" data-filter-count="#marked-count" data-filter-empty="#marked-empty">
+  </span>
+  <span class="filter-count" id="marked-count" aria-live="polite"></span>
+</div>
+{% endif %}
+
+{% if compact %}
+<ol class="rows" id="marked-list">
+  {% set ns = namespace(hour=None) %}
   {% for m in marked %}
-  {% set drifted = m.revision_drift is not none and m.revision_drift > drift_threshold %}
-  <li class="tl-item">
+    {% set hour = (m.occurred_at|clock)[:2] %}
+    {% if hour != ns.hour %}
+      <li class="hour-divider" aria-hidden="true"><span>{{ hour }}:00</span></li>
+      {% set ns.hour = hour %}
+    {% endif %}
+    {% set p = pillar_of(m.section) %}
+    <li class="row filterable pillar-{{ p.id }} {% if m.drifted %}is-drifted{% endif %}" data-text="{{ (m.headline ~ ' ' ~ (m.section or '') ~ ' ' ~ (m.actor|person))|lower }}">
+      <details class="r-more">
+        <summary class="r-line">
+          <span class="r-time">{{ m.occurred_at|clock }}</span>
+          {{ section_chip(m.section) }}
+          <span class="r-main">
+            <span class="r-headline">{{ m.headline }}</span>
+            <span class="r-by">{{ m.actor|person }}{% if m.note %} <span class="sep">·</span> <span class="r-note">“{{ m.note }}”</span>{% endif %}</span>
+          </span>
+          {% if m.drifted %}
+            <span class="drift-badge" title="Rewritten since marking — {{ m.revision_drift }} revisions on">
+              <span class="sr-only">Rewritten since marking, </span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              +{{ m.revision_drift }} revs
+            </span>
+          {% endif %}
+          <span class="r-chev" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+        </summary>
+        <div class="r-panel">
+          <p class="meta">Marked at revision {{ m.revision }}{% if m.drifted %} <span class="sep">·</span> now at {{ m.current_revision }}{% endif %}</p>
+          {% if m.drifted %}
+            <div class="drift">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <span>Rewritten since marking — {{ m.revision_drift }} revisions on. Worth a second look.</span>
+              {% if m.web_url %}<a class="drift-action" href="{{ m.web_url }}" target="_blank" rel="noopener">See what changed ↗</a>{% endif %}
+            </div>
+          {% endif %}
+          <p class="card-links">
+            <a class="textlink" href="{{ url_for('article', content_id=m.content_id) }}">History</a>
+            {% if m.web_url and not m.drifted %}<span class="sep">·</span> <a class="textlink" href="{{ m.web_url }}" target="_blank" rel="noopener">Read on the site ↗</a>{% endif %}
+          </p>
+          {% if not is_past %}{{ retract_form(m) }}{% endif %}
+        </div>
+      </details>
+    </li>
+  {% else %}
+    <li class="empty" id="marked-empty-static">{% if filtered %}Nothing matches this filter.{% else %}Mark an article below and it appears here, stamped with the time and your name.{% endif %}</li>
+  {% endfor %}
+</ol>
+<p class="empty filter-empty" id="marked-empty" hidden>No marked articles match that search.</p>
+
+{% else %}
+<ul class="timeline" id="marked-list">
+  {% for m in marked %}
+  {% set p = pillar_of(m.section) %}
+  <li class="tl-item filterable pillar-{{ p.id }} {% if m.drifted %}is-drifted{% endif %}" data-text="{{ (m.headline ~ ' ' ~ (m.section or '') ~ ' ' ~ (m.actor|person))|lower }}">
     <span class="tl-time">{{ m.occurred_at|clock }}</span>
     <div class="card flagged">
+      <p class="card-top">{{ section_chip(m.section) }}</p>
       <p class="headline"><a class="headline-link" href="{{ url_for('article', content_id=m.content_id) }}">{{ m.headline }}</a></p>
       <p class="meta">
         <span class="byline">{{ m.actor|person }}</span>
-        <span class="sep">·</span> {{ m.section }}
         <span class="sep">·</span> revision {{ m.revision }}
       </p>
       {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
-      {% if drifted %}
+      {% if m.drifted %}
         <div class="drift">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
           <span>Rewritten since marking — {{ m.revision_drift }} revisions on. Worth a second look.</span>
@@ -53,33 +189,26 @@
       {% endif %}
       <p class="card-links">
         <a class="textlink" href="{{ url_for('article', content_id=m.content_id) }}">History</a>
-        {% if m.web_url and not drifted %}<span class="sep">·</span> <a class="textlink" href="{{ m.web_url }}" target="_blank" rel="noopener">Read on the site ↗</a>{% endif %}
+        {% if m.web_url and not m.drifted %}<span class="sep">·</span> <a class="textlink" href="{{ m.web_url }}" target="_blank" rel="noopener">Read on the site ↗</a>{% endif %}
       </p>
-      {% if not is_past %}
-      <details class="retract">
-        <summary>Retract…</summary>
-        <form class="inline retract-form" method="post" action="{{ url_for('retract', day_str=day_str) }}">
-          <input type="hidden" name="content_id" value="{{ m.content_id }}">
-          <input type="text" name="note" aria-label="Reason for retracting ‘{{ m.headline }}’" placeholder="Reason (recommended)">
-          <button class="quiet" type="submit" data-busy="Retracting…" aria-label="Confirm retract of ‘{{ m.headline }}’">Confirm retract</button>
-        </form>
-      </details>
-      {% endif %}
+      {% if not is_past %}{{ retract_form(m) }}{% endif %}
     </div>
   </li>
   {% else %}
-  <li class="empty">Mark an article below and it appears here, stamped with the time and your name.</li>
+  <li class="empty">{% if filtered %}Nothing matches this filter.{% else %}Mark an article below and it appears here, stamped with the time and your name.{% endif %}</li>
   {% endfor %}
 </ul>
+<p class="empty filter-empty" id="marked-empty" hidden>No marked articles match that search.</p>
+{% endif %}
 
 {% if retracted %}
-<div class="section-head"><h2>Retracted</h2><span class="rule"></span></div>
+<div class="section-head" id="retracted"><h2>Retracted</h2><span class="rule"></span></div>
 <ul class="retracted">
   {% for r in retracted %}
   <li>
     <span class="t">{{ r.occurred_at|clock }}</span>
     <div>
-      <p class="h">{{ r.headline }}</p>
+      <p class="h">{{ section_chip(r.section) }} {{ r.headline }}</p>
       <p class="m">Taken off by {{ r.actor|person }}{% if r.note %} — {{ r.note }}{% endif %}</p>
     </div>
   </li>
@@ -88,7 +217,7 @@
 {% endif %}
 
 {% if not is_past %}
-<div class="section-head"><h2>Pull from CAPI</h2><span class="rule"></span></div>
+<div class="section-head" id="pull"><h2>Pull from CAPI</h2><span class="rule"></span></div>
 {% if capi_error %}
 <p class="banner err" role="alert">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
@@ -98,7 +227,7 @@
 {% if pulled is not none %}
 <p class="banner ok" role="status">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-  <span>Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }} into the list below.</span>
+  <span>Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }}{% if pulled_section %} from <strong>{{ pulled_section }}</strong>{% endif %}{% if capi_query %} matching “{{ capi_query }}”{% endif %} into the list below.</span>
 </p>
 {% endif %}
 <div class="pull-card">
@@ -127,23 +256,50 @@
   </form>
 </div>
 
-<div class="section-head"><h2>Mark an article</h2><span class="rule"></span></div>
-<p class="hint">Marking records the article's current revision, so we can tell later if it changed after the call was made.</p>
+<div class="section-head" id="candidates"><h2>Mark an article</h2><span class="rule"></span></div>
+<p class="hint">Marking records the article's current revision, so we can tell later if it changed after the call was made.{% if section_filter %} Showing <strong>{{ section_filter }}</strong> only — <a class="textlink" href="{{ daylink(day_str, section=None) }}#candidates">show all sections</a>.{% endif %}</p>
 {% if candidates %}
 <div class="filterbar">
-  <label class="filter-label" for="candidate-filter">Filter</label>
+  <label class="filter-label" for="candidate-filter">Find</label>
   <span class="field">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input type="search" id="candidate-filter" aria-label="Filter candidates by headline or section" placeholder="Filter these {{ candidates|length }} candidates…" data-filter="candidate">
+    <input type="search" id="candidate-filter" aria-label="Find a candidate by headline or section" placeholder="Filter these {{ candidates|length }} candidates…" data-filter-target="#candidate-list" data-filter-count="#candidate-count" data-filter-empty="#candidate-empty">
   </span>
   <span class="filter-count" id="candidate-count" aria-live="polite"></span>
 </div>
-<div class="grid" id="candidate-grid">
+
+{% if candidates_compact %}
+<ol class="rows cands" id="candidate-list">
   {% for c in candidates %}
-  <div class="candidate filterable" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
+  {% set p = pillar_of(c.section) %}
+  <li class="row cand filterable pillar-{{ p.id }}" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
+    <div class="r-line">
+      {{ section_chip(c.section) }}
+      <span class="r-main">
+        <span class="r-headline">{{ c.headline }}</span>
+        <span class="r-by">revision {{ c.revision }}</span>
+      </span>
+      <form class="inline r-form" method="post" action="{{ url_for('mark', day_str=day_str) }}">
+        <details class="note-more">
+          <summary aria-label="Add a note for ‘{{ c.headline }}’">Note</summary>
+          <input type="text" name="note" aria-label="Note for marking ‘{{ c.headline }}’" placeholder="Note (optional)">
+        </details>
+        <input type="hidden" name="content_id" value="{{ c.content_id }}">
+        <button type="submit" data-busy="Marking…" aria-label="Mark ‘{{ c.headline }}’">Mark</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<div class="grid" id="candidate-list">
+  {% for c in candidates %}
+  {% set p = pillar_of(c.section) %}
+  <div class="candidate filterable pillar-{{ p.id }}" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
     <div class="grow">
+      <p class="card-top">{{ section_chip(c.section) }}</p>
       <p class="headline">{{ c.headline }}</p>
-      <p class="meta">{{ c.section }} <span class="sep">·</span> revision {{ c.revision }}</p>
+      <p class="meta">revision {{ c.revision }}</p>
     </div>
     <form class="inline" method="post" action="{{ url_for('mark', day_str=day_str) }}">
       <input type="text" name="note" aria-label="Note for marking ‘{{ c.headline }}’" placeholder="Note (optional)">
@@ -153,10 +309,13 @@
   </div>
   {% endfor %}
 </div>
+{% endif %}
 <p class="empty filter-empty" id="candidate-empty" hidden>No candidates match that filter.</p>
 {% else %}
-  {% if cached == 0 %}
+  {% if to_mark == 0 and cached == 0 %}
   <p class="empty">No articles loaded yet. Run <code>python seed.py</code>, pull from CAPI above, or POST a payload to <code>/api/articles</code>. Reading from <code>{{ db_path }}</code>.</p>
+  {% elif section_filter %}
+  <p class="empty">No unmarked candidates in {{ section_filter }}. <a class="textlink" href="{{ daylink(day_str, section=None) }}#candidates">Show all sections</a>.</p>
   {% else %}
   <p class="empty">All {{ cached }} loaded articles are already marked for this day.</p>
   {% endif %}
