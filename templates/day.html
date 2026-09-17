@@ -17,6 +17,43 @@
   </details>
 {%- endmacro %}
 
+{% macro candidate_row(c) -%}
+  {%- set p = pillar_of(c.section) -%}
+  <li class="row cand filterable pillar-{{ p.id }}" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
+    <div class="r-line">
+      {{ section_chip(c.section) }}
+      <span class="r-main">
+        <span class="r-headline">{{ c.headline }}</span>
+        <span class="r-by">revision {{ c.revision }}</span>
+      </span>
+      <form class="inline r-form" method="post" action="{{ url_for('mark', day_str=day_str) }}">
+        <details class="note-more">
+          <summary aria-label="Add a note for ‘{{ c.headline }}’">Note</summary>
+          <input type="text" name="note" aria-label="Note for marking ‘{{ c.headline }}’" placeholder="Note (optional)">
+        </details>
+        <input type="hidden" name="content_id" value="{{ c.content_id }}">
+        <button type="submit" data-busy="Marking…" aria-label="Mark ‘{{ c.headline }}’">Mark</button>
+      </form>
+    </div>
+  </li>
+{%- endmacro %}
+
+{% macro candidate_card(c) -%}
+  {%- set p = pillar_of(c.section) -%}
+  <div class="candidate filterable pillar-{{ p.id }}" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
+    <div class="grow">
+      <p class="card-top">{{ section_chip(c.section) }}</p>
+      <p class="headline">{{ c.headline }}</p>
+      <p class="meta">revision {{ c.revision }}</p>
+    </div>
+    <form class="inline" method="post" action="{{ url_for('mark', day_str=day_str) }}">
+      <input type="text" name="note" aria-label="Note for marking ‘{{ c.headline }}’" placeholder="Note (optional)">
+      <input type="hidden" name="content_id" value="{{ c.content_id }}">
+      <button type="submit" data-busy="Marking…" aria-label="Mark ‘{{ c.headline }}’">Mark</button>
+    </form>
+  </div>
+{%- endmacro %}
+
 {% block content %}
 <section class="hero">
   <p class="eyebrow">{% if is_today %}Today{% elif is_past %}Closed day{% else %}Day log{% endif %}</p>
@@ -225,9 +262,16 @@
 </p>
 {% endif %}
 {% if pulled is not none %}
-<p class="banner ok" role="status">
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-  <span>Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }}{% if pulled_section %} from <strong>{{ pulled_section }}</strong>{% endif %}{% if capi_query %} matching “{{ capi_query }}”{% endif %} into the list below.</span>
+<p class="banner {{ 'ok' if pulled else 'info' }}" role="status">
+  {% if pulled %}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% endif %}
+  <span>
+    {% if pulled %}
+      Pulled {{ pulled }} article{{ '' if pulled == 1 else 's' }}{% if pulled_section %} from <strong>{{ pulled_section }}</strong>{% endif %}{% if capi_query %} matching “{{ capi_query }}”{% endif %}
+      {%- if pulled_names and pulled_names != pulled_section %} (CAPI files them under {{ pulled_names }}){% endif %} — shown first under “Mark an article”.
+    {% else %}
+      CAPI returned no articles{% if pulled_section %} for <strong>{{ pulled_section }}</strong>{% endif %}{% if capi_query %} matching “{{ capi_query }}”{% endif %}. Try a different section or a broader search.
+    {% endif %}
+  </span>
 </p>
 {% endif %}
 <div class="pull-card">
@@ -242,8 +286,13 @@
   <form class="capi-search" method="post" action="{{ url_for('pull', day_str=day_str) }}" aria-describedby="pull-hint">
     <span class="select">
       <select name="section" aria-label="Pillar or section" {% if not capi_ready %}disabled{% endif %}>
-        {% for value, label in pillars %}
-        <option value="{{ value }}" {% if value == capi_section %}selected{% endif %}>{{ label }}</option>
+        <option value="" {% if not capi_section %}selected{% endif %}>All sections</option>
+        {% for group, options in pillar_groups %}
+        <optgroup label="{{ group }}">
+          {% for value, label in options %}
+          <option value="{{ value }}" {% if value == capi_section %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </optgroup>
         {% endfor %}
       </select>
       <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -270,44 +319,21 @@
 
 {% if candidates_compact %}
 <ol class="rows cands" id="candidate-list">
-  {% for c in candidates %}
-  {% set p = pillar_of(c.section) %}
-  <li class="row cand filterable pillar-{{ p.id }}" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
-    <div class="r-line">
-      {{ section_chip(c.section) }}
-      <span class="r-main">
-        <span class="r-headline">{{ c.headline }}</span>
-        <span class="r-by">revision {{ c.revision }}</span>
-      </span>
-      <form class="inline r-form" method="post" action="{{ url_for('mark', day_str=day_str) }}">
-        <details class="note-more">
-          <summary aria-label="Add a note for ‘{{ c.headline }}’">Note</summary>
-          <input type="text" name="note" aria-label="Note for marking ‘{{ c.headline }}’" placeholder="Note (optional)">
-        </details>
-        <input type="hidden" name="content_id" value="{{ c.content_id }}">
-        <button type="submit" data-busy="Marking…" aria-label="Mark ‘{{ c.headline }}’">Mark</button>
-      </form>
-    </div>
-  </li>
-  {% endfor %}
+  {% if just_pulled %}
+    <li class="hour-divider group-divider"><span>Just pulled · {{ just_pulled|length }}{% if pulled_names %} · {{ pulled_names }}{% endif %}</span></li>
+    {% for c in just_pulled %}{{ candidate_row(c) }}{% endfor %}
+    {% if candidates_rest %}<li class="hour-divider group-divider"><span>Everything else · {{ candidates_rest|length }}</span></li>{% endif %}
+  {% endif %}
+  {% for c in candidates_rest %}{{ candidate_row(c) }}{% endfor %}
 </ol>
 {% else %}
 <div class="grid" id="candidate-list">
-  {% for c in candidates %}
-  {% set p = pillar_of(c.section) %}
-  <div class="candidate filterable pillar-{{ p.id }}" data-text="{{ (c.headline ~ ' ' ~ (c.section or ''))|lower }}">
-    <div class="grow">
-      <p class="card-top">{{ section_chip(c.section) }}</p>
-      <p class="headline">{{ c.headline }}</p>
-      <p class="meta">revision {{ c.revision }}</p>
-    </div>
-    <form class="inline" method="post" action="{{ url_for('mark', day_str=day_str) }}">
-      <input type="text" name="note" aria-label="Note for marking ‘{{ c.headline }}’" placeholder="Note (optional)">
-      <input type="hidden" name="content_id" value="{{ c.content_id }}">
-      <button type="submit" data-busy="Marking…" aria-label="Mark ‘{{ c.headline }}’">Mark</button>
-    </form>
-  </div>
-  {% endfor %}
+  {% if just_pulled %}
+    <p class="hour-divider group-divider span-all"><span>Just pulled · {{ just_pulled|length }}{% if pulled_names %} · {{ pulled_names }}{% endif %}</span></p>
+    {% for c in just_pulled %}{{ candidate_card(c) }}{% endfor %}
+    {% if candidates_rest %}<p class="hour-divider group-divider span-all"><span>Everything else · {{ candidates_rest|length }}</span></p>{% endif %}
+  {% endif %}
+  {% for c in candidates_rest %}{{ candidate_card(c) }}{% endfor %}
 </div>
 {% endif %}
 <p class="empty filter-empty" id="candidate-empty" hidden>No candidates match that filter.</p>

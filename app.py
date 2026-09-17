@@ -26,24 +26,32 @@ CURRENT_USER = "hollie.richardson@guardian.co.uk"
 # A piece rewritten by this many revisions since marking gets flagged for review.
 DRIFT_THRESHOLD = 25
 
-# Guardian pillars / sections offered in the CAPI search dropdown. The value is
-# the CAPI section id passed as ?section=…; the empty value searches everything.
-PILLARS = [
-    ("", "All sections"),
-    ("news", "News"),
-    ("politics", "Politics"),
-    ("world", "World"),
-    ("environment", "Environment"),
-    ("business", "Business"),
-    ("technology", "Technology"),
-    ("science", "Science"),
-    ("society", "Society"),
-    ("sport", "Sport"),
-    ("football", "Football"),
-    ("culture", "Culture"),
-    ("lifestyle", "Lifestyle"),
-    ("commentisfree", "Opinion"),
+# Sections offered in the CAPI search dropdown, grouped by pillar. The value is
+# the CAPI *section id* sent as ?section=… — these must match CAPI exactly
+# (note lifeandstyle, commentisfree, tv-and-radio, artanddesign). There is no
+# usable "news" section id: "news" in CAPI is a small catch-all, so the News
+# pillar is offered as its real sections instead.
+PILLAR_GROUPS = [
+    ("News", [
+        ("uk-news", "UK news"), ("world", "World"), ("us-news", "US news"),
+        ("politics", "Politics"), ("environment", "Environment"),
+        ("business", "Business"), ("technology", "Technology"),
+        ("science", "Science"), ("society", "Society"),
+        ("media", "Media"), ("education", "Education"),
+    ]),
+    ("Opinion", [("commentisfree", "Opinion")]),
+    ("Sport", [("sport", "Sport"), ("football", "Football")]),
+    ("Culture", [
+        ("culture", "Culture"), ("film", "Film"), ("music", "Music"),
+        ("books", "Books"), ("tv-and-radio", "TV & radio"), ("stage", "Stage"),
+        ("artanddesign", "Art & design"), ("games", "Games"),
+    ]),
+    ("Lifestyle", [
+        ("lifeandstyle", "Life and style"), ("food", "Food"),
+        ("travel", "Travel"), ("fashion", "Fashion"),
+    ]),
 ]
+PILLARS = [("", "All sections")] + [opt for _, opts in PILLAR_GROUPS for opt in opts]
 PILLAR_VALUES = {value for value, _ in PILLARS}
 
 # The Guardian's five pillars, used to colour-code section chips. Only the
@@ -170,6 +178,14 @@ def day(day_str):
     capi_section = request.args.get("capi_section", "")
     pulled_section = dict(PILLARS).get(capi_section) if capi_section else None
 
+    # Straight after a pull, surface what just came in ahead of everything else
+    # so it's obvious which stories the dropdown actually fetched.
+    since = request.args.get("since")
+    just_pulled = [c for c in candidates if since and (c.get("refreshed_at") or "") >= since]
+    just_ids = {c["content_id"] for c in just_pulled}
+    candidates_rest = [c for c in candidates if c["content_id"] not in just_ids]
+    pulled_names = " · ".join(sorted({c["section"] for c in just_pulled if c["section"]}))
+
     return render_template(
         "day.html",
         day=day_obj,
@@ -202,7 +218,11 @@ def day(day_str):
         pulled=request.args.get("pulled", type=int),
         pulled_section=pulled_section,
         pillars=PILLARS,
+        pillar_groups=PILLAR_GROUPS,
         capi_section=capi_section,
+        just_pulled=just_pulled,
+        candidates_rest=candidates_rest,
+        pulled_names=pulled_names,
     )
 
 
@@ -229,6 +249,9 @@ def pull(day_str):
         return redirect(url_for("day", day_str=day_str, q=query, capi_section=section or None,
                                 capi_error=str(exc), _anchor="pull"))
 
+    # Everything upserted from here on carries a refreshed_at >= `since`, which
+    # is how the day view knows which candidates came from this pull.
+    since = store.now_iso()
     added = 0
     with store.connect() as conn:
         for item in results:
@@ -239,7 +262,7 @@ def pull(day_str):
             store.upsert_article(conn, article)
             added += 1
     return redirect(url_for("day", day_str=day_str, q=query, capi_section=section or None,
-                            pulled=added, _anchor="pull"))
+                            pulled=added, since=since, _anchor="pull"))
 
 
 @app.route("/day/<day_str>/mark", methods=["POST"])

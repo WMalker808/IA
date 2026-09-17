@@ -751,6 +751,10 @@ a.r-headline { text-decoration-color: transparent; }
   color: var(--muted); background: var(--paper);
 }
 .hour-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+/* "Just pulled" / "Everything else" groupings in the candidate list. */
+.group-divider { color: var(--go); letter-spacing: .06em; margin: 0; }
+.group-divider::after { background: color-mix(in srgb, var(--go) 35%, var(--line)); }
+.grid .span-all { grid-column: 1 / -1; }
 
 /* candidate rows: the note is tucked behind a small toggle */
 .r-form { gap: .4rem; flex-wrap: nowrap; }
